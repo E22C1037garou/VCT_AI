@@ -1,0 +1,15 @@
+# Flask and Web Server
+flask
+flask-socketio
+gunicorn
+eventlet
+
+# AI and Machine Learning
+openai
+openai-whisper
+numpy
+soundfile
+librosa
+
+# Utilities
+python-dotenv

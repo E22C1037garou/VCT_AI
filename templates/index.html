@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>AIハイブリッド分析 リアルタイム字幕</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.min.js"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="header">
+    <div class="header-content">
+      <h1>🎥 AIハイブリッド分析 リアルタイム字幕</h1>
+      <div id="analysis-indicator">
+        <strong>AI分析結果:</strong>
+        <span id="category">カテゴリ: N/A</span> | 
+        <span id="gender">声質: N/A</span> | 
+        <span id="personality">性格: N/A</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="controls">
+      <form id="startForm">
+        <input type="text" id="urlInput" name="stream_url" placeholder="YouTubeやTwitchのURLを入力" required>
+        <button type="submit">開始</button>
+        <button type="button" id="stopButton">停止</button>
+      </form>
+    </div>
+    <div class="main-content"><iframe id="videoFrame" allow="autoplay" allowfullscreen></iframe></div>
+    <div class="main-content subtitles-container">
+        <div class="subtitle-panel"><h2>📝 英語</h2><div id="en_output"></div></div>
+        <div class="subtitle-panel"><h2>🌐 日本語</h2><div id="ja_output"></div></div>
+    </div>
+  </main>
+  
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
