@@ -5,9 +5,7 @@ set -o errexit
 # 1. Pythonライブラリのインストール
 pip install -r requirements.txt
 
-# 2. OSのパッケージリストを更新
-apt-get update
-
-# 3. ffmpeg と streamlink をインストール
-# -y フラグは、インストールの確認プロンプトに自動で 'yes' と答えるためのものです
+# 2. ffmpeg と streamlink を直接インストール
+echo "Installing system dependencies: ffmpeg and streamlink..."
 apt-get install -y ffmpeg streamlink
+echo "System dependencies installed successfully."
