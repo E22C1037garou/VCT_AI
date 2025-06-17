@@ -33,7 +33,8 @@ BASE_PROMPT_STYLES = {
 }
 
 # Whisperモデル
-model = whisper.load_model("base")
+# model = whisper.load_model("base")
+model = whisper.load_model("tiny") #軽量モデル
 
 app = Flask(__name__)
 socketio = SocketIO(app)
