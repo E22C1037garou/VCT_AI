@@ -20,9 +20,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 5. アプリケーションの全ファイルをコピー
 COPY . .
 
-# 6. Renderが使用するポート番号を指定 (Renderが自動で設定する$PORTを使います)
-EXPOSE 10000
+# 6. Renderが使用するポート番号を指定 (Dockerfileではこの行は不要ですが、参考として)
+# EXPOSE 10000 # Renderでは$PORTが使われるため、この行は実質的に無視されます
 
-# 7. アプリケーションの起動コマンド
-# Gunicornを使って、Socket.IO対応のワーカーでアプリを起動します
-CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", "--threads", "100", "--timeout", "120", "--bind", "0.0.0.0:10000", "stream:app"]
+# 7. アプリケーションの起動コマンド (修正箇所)
+CMD gunicorn --worker-class eventlet -w 1 --threads 100 --timeout 120 --bind 0.0.0.0:${PORT} stream:app
