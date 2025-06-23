@@ -10,3 +10,4 @@ python-dotenv
 
 # Utilities
 numpy
+yt-dlp
