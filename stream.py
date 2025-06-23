@@ -106,10 +106,10 @@ def transcribe_loop(url, style):
     print(f"🔁 リアルタイム文字起こし開始 (スタイル: {style})")
 
     streamlink_cmd = ["streamlink", "--stdout", url, "best"]
-    stream_proc = subprocess.Popen(streamlink_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    stream_proc = subprocess.Popen(streamlink_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     ffmpeg_cmd = ["ffmpeg", "-i", "pipe:0", "-f", "s16le", "-acodec", "pcm_s16le", "-ac", "1", "-ar", "16000", "pipe:1"]
-    ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=stream_proc.stdout, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=stream_proc.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     
     chunk_duration = 4  # API呼び出しの頻度を少し下げる
     chunk_size = 16000 * 2 * 1 * chunk_duration
