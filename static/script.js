@@ -1,119 +1,97 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // サーバーとの接続を確立
+    // --- 要素取得 ---
     const socket = io();
+    const startForm = document.getElementById('startForm');
+    const urlInput = document.getElementById('urlInput');
+    const stopButton = document.getElementById('stopButton');
+    const videoFrame = document.getElementById('videoFrame');
+    const subtitleOutput = document.getElementById('subtitle_output');
+    const hamburger = document.querySelector('.hamburger');
+    const nav = document.querySelector('.nav');
 
-    // HTML要素の取得
-    const startForm = document.getElementById("startForm");
-    const urlInput = document.getElementById("urlInput");
-    const stopButton = document.getElementById("stopButton");
-    const videoFrame = document.getElementById("videoFrame");
-    const enOutput = document.getElementById("en_output");
-    const jaOutput = document.getElementById("ja_output");
+    // --- 設定用UI要素 ---
+    const promptStyleSelect = document.getElementById('prompt_style');
+    const subtitleSizeSelect = document.getElementById('subtitle_size');
+    const subtitleColorSelect = document.getElementById('subtitle_color');
+    const subtitleLangSelect = document.getElementById('subtitle_lang');
 
-    // AI分析結果を表示するための要素
-    const categoryEl = document.getElementById("category");
-    const genderEl = document.getElementById("gender");
-    const personalityEl = document.getElementById("personality");
+    let currentEn = '';
+    let currentJa = '';
 
-    // サーバーから新しい字幕テキストデータを受信するイベント
-    socket.on("new_text", function (data) {
-        if(enOutput) {
-            enOutput.innerHTML += `<p>${data.en}</p>`;
-            // 自動で一番下までスクロール
-            enOutput.parentElement.scrollTop = enOutput.parentElement.scrollHeight;
-        }
-        if(jaOutput) {
-            jaOutput.innerHTML += `<p>${data.ja}</p>`;
-            // 自動で一番下までスクロール
-            jaOutput.parentElement.scrollTop = jaOutput.parentElement.scrollHeight;
-        }
-    });
-
-    // サーバーからAIの分析結果を受信するイベント
-    socket.on("analysis_update", function (data) {
-        console.log("Analysis Result Received:", data);
-        if(categoryEl) categoryEl.textContent = `カテゴリ: ${data.category || 'N/A'}`;
-        if(genderEl) genderEl.textContent = `声質: ${data.gender || 'N/A'}`;
-        if(personalityEl) personalityEl.textContent = `性格: ${data.personality || 'N/A'}`;
-    });
-
-    // YouTubeの動画IDをURLから抽出する関数
-    function getYouTubeVideoId(url) {
-        const regex = /(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
-        const matches = url.match(regex);
-        return matches ? matches[1] : null;
-    }
-
-    // Twitchのチャンネル名をURLから抽出する関数
-    function getTwitchChannelName(url) {
-        const regex = /(?:https?:\/\/)?(?:www\.)?twitch\.tv\/([^\/\n\s]+)/;
-        const matches = url.match(regex);
-        return matches ? matches[1] : null;
-    }
-    
-    // 「開始」ボタンが押されたときの処理
-    if (startForm) {
-        startForm.addEventListener("submit", function (event) {
-            // フォームのデフォルトの送信動作をキャンセル
-            event.preventDefault();
-
-            // UIを初期状態にリセット
-            if(categoryEl) categoryEl.textContent = "カテゴリ: 分析中...";
-            if(genderEl) genderEl.textContent = "声質: 分析中...";
-            if(personalityEl) personalityEl.textContent = "性格: 分析中...";
-            if(enOutput) enOutput.innerHTML = "";
-            if(jaOutput) jaOutput.innerHTML = "";
-            
-            const url = urlInput.value.trim();
-            if (!url) {
-                alert("URLを入力してください。");
-                return;
-            }
-            
-            // サーバーに文字起こし開始のリクエストを送信
-            const formData = new FormData();
-            formData.append('stream_url', url);
-    
-            fetch("/start", {
-                method: "POST",
-                body: formData
-            }).then(response => response.text()).then(console.log);
-    
-            // 動画プレイヤーの埋め込み処理
-            let embedUrl = '';
-            if (url.includes("youtube.com") || url.includes("youtu.be")) {
-                const videoId = getYouTubeVideoId(url);
-                if (videoId) {
-                    embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
-                }
-            } else if (url.includes("twitch.tv")) {
-                const channelName = getTwitchChannelName(url);
-                if (channelName) {
-                    // 'localhost'の部分は、もし別のドメインで実行する場合はそのドメイン名に変更
-                    embedUrl = `https://player.twitch.tv/?channel=${channelName}&parent=localhost&autoplay=true&muted=true`;
-                }
-            }
-    
-            if (embedUrl) {
-                videoFrame.src = embedUrl;
-                videoFrame.style.display = "block";
-            } else {
-                alert("対応しているYouTubeまたはTwitchのURLを入力してください。");
+    // --- ハンバーガーメニューのロジック ---
+    if (hamburger && nav) {
+        hamburger.addEventListener('click', () => {
+            hamburger.classList.toggle('active');
+            nav.classList.toggle('active');
+            const isOpen = hamburger.classList.contains('active');
+            hamburger.setAttribute('aria-expanded', isOpen);
+            nav.setAttribute('aria-hidden', !isOpen);
+        });
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.nav') && !e.target.closest('.hamburger') && nav.classList.contains('active')) {
+                hamburger.classList.remove('active');
+                nav.classList.remove('active');
+                hamburger.setAttribute('aria-expanded', false);
+                nav.setAttribute('aria-hidden', true);
             }
         });
     }
 
-    // 「停止」ボタンが押されたときの処理
-    if (stopButton) {
-        stopButton.addEventListener("click", function () {
-            // サーバーに停止リクエストを送信
-            fetch("/stop", { method: "POST" })
-                .then(response => response.text()).then(console.log);
-            
-            // 動画プレイヤーと字幕をクリア
-            videoFrame.src = "";
-            videoFrame.style.display = "none";
-            urlInput.value = "";
-        });
-    }
+    // --- 字幕表示を更新する関数 ---
+    const updateSubtitleDisplay = () => {
+        const selectedLang = subtitleLangSelect.value;
+        subtitleOutput.textContent = selectedLang === 'ja' ? currentJa : currentEn;
+        subtitleOutput.style.fontSize = subtitleSizeSelect.value;
+        subtitleOutput.style.color = subtitleColorSelect.value;
+    };
+
+    // --- Socket.IOイベントリスナー ---
+    socket.on('new_subtitle', (data) => {
+        currentEn = data.en;
+        currentJa = data.ja;
+        updateSubtitleDisplay();
+    });
+
+    // --- フォームとボタンのイベントリスナー ---
+    startForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const url = urlInput.value.trim();
+        if (!url) return alert("URLを入力してください。");
+
+        // 埋め込みURLを生成
+        let embedUrl = url;
+        if (url.includes('youtube.com') || url.includes('youtu.be')) {
+            const videoId = url.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})/).pop();
+            if (videoId) embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+        } else if (url.includes('twitch.tv')) {
+            const channel = url.match(/twitch\.tv\/([^\/]+)/).pop();
+            if (channel) embedUrl = `https://player.twitch.tv/?channel=${channel}&parent=${window.location.hostname}&autoplay=true&muted=true`;
+        }
+        videoFrame.src = embedUrl;
+
+        // フォームデータを取得してサーバーに送信
+        const formData = new FormData(startForm);
+        fetch('/start', { method: 'POST', body: formData });
+
+        // 字幕をクリア
+        currentEn = '';
+        currentJa = '';
+        updateSubtitleDisplay();
+    });
+
+    stopButton.addEventListener('click', () => {
+        videoFrame.src = "about:blank";
+        fetch('/stop', { method: 'POST' });
+        currentEn = '';
+        currentJa = '翻訳を停止しました';
+        updateSubtitleDisplay();
+    });
+    
+    // --- 設定変更のイベントリスナー ---
+    subtitleSizeSelect.addEventListener('change', updateSubtitleDisplay);
+    subtitleColorSelect.addEventListener('change', updateSubtitleDisplay);
+    subtitleLangSelect.addEventListener('change', updateSubtitleDisplay);
+
+    // --- 初期化 ---
+    updateSubtitleDisplay(); // ページロード時に初期スタイルを適用
 });

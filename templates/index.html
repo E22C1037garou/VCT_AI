@@ -2,23 +2,58 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>AIハイブリッド分析 リアルタイム字幕</title>
+  <title>リアルタイム字幕付き配信ビューワー</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.min.js"></script>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
   <header class="header">
-    <div class="header-content">
-      <h1>🎥 AIハイブリッド分析 リアルタイム字幕</h1>
-      <div id="analysis-indicator">
-        <strong>AI分析結果:</strong>
-        <span id="category">カテゴリ: N/A</span> | 
-        <span id="gender">声質: N/A</span> | 
-        <span id="personality">性格: N/A</span>
-      </div>
-    </div>
+    <button class="hamburger" aria-label="メニュー" aria-controls="nav-menu" aria-expanded="false">
+      <span class="hamburger__line"></span>
+      <span class="hamburger__line"></span>
+    </button>
   </header>
+
+  <nav id="nav-menu" class="nav" aria-hidden="true">
+    <ul class="nav__list">
+      <li class="nav__item">
+        <label for="prompt_style">翻訳スタイル:</label>
+        <select id="prompt_style" name="prompt_style" form="startForm">
+            {% for style_key, style_text in prompt_styles.items() %}
+                {% if style_key == 'serious' %}<option value="serious" selected>真面目な翻訳</option>
+                {% elif style_key == 'casual' %}<option value="casual">フランクな翻訳</option>
+                {% elif style_key == 'humorous' %}<option value="humorous">ユーモアな翻訳</option>
+                {% elif style_key == 'expert' %}<option value="expert">専門家風の翻訳</option>
+                {% endif %}
+            {% endfor %}
+        </select>
+      </li>
+      <li class="nav__item">
+        <label for="subtitle_size">字幕サイズ:</label>
+        <select id="subtitle_size">
+          <option value="20px">小</option>
+          <option value="24px" selected>中</option>
+          <option value="32px">大</option>
+        </select>
+      </li>
+      <li class="nav__item">
+        <label for="subtitle_color">字幕カラー:</label>
+        <select id="subtitle_color">
+          <option value="white" selected>白</option>
+          <option value="yellow">黄</option>
+          <option value="cyan">水色</option>
+        </select>
+      </li>
+      <li class="nav__item">
+        <label for="subtitle_lang">表示言語:</label>
+        <select id="subtitle_lang">
+          <option value="ja" selected>日本語訳</option>
+          <option value="en">英語原文</option>
+        </select>
+      </li>
+    </ul>
+  </nav>
 
   <main>
     <div class="controls">
@@ -28,10 +63,10 @@
         <button type="button" id="stopButton">停止</button>
       </form>
     </div>
-    <div class="main-content"><iframe id="videoFrame" allow="autoplay" allowfullscreen></iframe></div>
-    <div class="main-content subtitles-container">
-        <div class="subtitle-panel"><h2>📝 英語</h2><div id="en_output"></div></div>
-        <div class="subtitle-panel"><h2>🌐 日本語</h2><div id="ja_output"></div></div>
+
+    <div class="main-content">
+      <iframe id="videoFrame" allow="autoplay" allowfullscreen></iframe>
+      <div id="subtitle_output"></div>
     </div>
   </main>
   

@@ -4,12 +4,9 @@ flask-socketio
 gunicorn
 eventlet
 
-# AI and Machine Learning
+# AI (API Client)
 openai
-openai-whisper
-numpy
-soundfile
-librosa
+python-dotenv
 
 # Utilities
-python-dotenv
+numpy

@@ -1,94 +1,105 @@
-/* === 既存のレイアウトスタイル === */
+/* 基本スタイル */
 body {
-    font-family: 'Helvetica Neue', Arial, sans-serif;
-    margin: 0;
-    padding: 0;
-    background-color: #f4f4f9;
-    color: #333;
-    padding-top: 80px; /* ヘッダーがfixedなのでコンテンツが隠れないように調整 */
+    font-family: Arial, sans-serif;
+    text-align: center;
+    margin: 20px;
+    background-color: #f0f2f5;
+    padding-top: 80px;
 }
-.header-title, .controls, .main-content {
-    width: 90%;
-    max-width: 1200px;
-    margin: 1.5em auto;
-}
-.header-title { text-align: center; }
-.controls form {
+main {
     display: flex;
-    flex-wrap: wrap;
-    gap: 1em;
+    flex-direction: column;
     align-items: center;
-    padding: 1.5em;
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
-.controls input[type="text"] {
-    flex-grow: 1;
-    padding: 0.8em;
-    font-size: 1em;
+h1 {
+    text-align: center;
+}
+.controls {
+    margin-bottom: 20px;
+}
+form {
+    display: flex;
+    gap: 10px;
+}
+input[type="text"] {
+    width: 60%;
+    min-width: 300px;
+    padding: 10px;
+    font-size: 16px;
     border: 1px solid #ccc;
     border-radius: 4px;
 }
-.controls button {
-    padding: 0.8em 1.2em;
-    font-size: 1em;
-    border: 1px solid #ccc;
-    border-radius: 4px;
+button {
+    padding: 10px 20px;
+    font-size: 16px;
     cursor: pointer;
+    border: none;
+    border-radius: 4px;
+}
+button[type="submit"] {
+    background-color: #4CAF50;
+    color: white;
+}
+button[type="button"] {
+    background-color: #f44336;
+    color: white;
+}
+
+/* 映像と字幕のコンテナ */
+.main-content {
+    position: relative;
+    width: 80%;
+    max-width: 854px; /* 480pの16:9 */
+    aspect-ratio: 16 / 9;
+    margin: 0 auto;
+    background: black;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
 }
 #videoFrame {
     width: 100%;
-    aspect-ratio: 16 / 9;
-    height: auto;
-    margin: 1.5em auto;
-    display: none;
+    height: 100%;
     border: none;
-    background-color: #000;
 }
-.subtitles-container {
-    display: flex;
-    gap: 1.5em;
-    text-align: left;
+#subtitle_output {
+    position: absolute;
+    bottom: 10%;
+    left: 5%;
+    right: 5%;
+    color: white;
+    font-size: 24px;
+    font-weight: bold;
+    text-align: center;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+    pointer-events: none;
+    user-select: none;
+    line-height: 1.4;
 }
-.subtitle-panel {
-    flex: 1;
-    background: #fff;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    padding: 1em;
-    height: 40vh;
-    overflow-y: scroll;
-}
-.subtitle-panel h2 {
-    margin-top: 0;
-    font-size: 1.2em;
-    border-bottom: 2px solid #eee;
-    padding-bottom: 0.5em;
-}
-.subtitle-panel p { margin: 0 0 0.8em 0; line-height: 1.5; }
 
-/* === ハンバーガーメニューのスタイル === */
+/* ハンバーガーメニューのスタイル */
 .header {
-  position: fixed; /* ヘッダーを画面上部に固定 */
+  position: fixed;
   top: 0;
   left: 0;
   width: 100%;
-  background-color: #ffffff;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  height: 60px;
+  background-color: #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,.1);
   z-index: 100;
-  padding: 10px 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 20px;
 }
 .hamburger {
-  position: absolute;
-  top: 10px;
-  right: 20px;
-  z-index: 110;
   width: 48px;
   height: 48px;
   border: none;
   background: transparent;
   cursor: pointer;
+  position: relative;
+  z-index: 110;
 }
 .hamburger__line {
   position: absolute;
@@ -101,7 +112,6 @@ body {
 .hamburger__line:nth-of-type(1) { top: 14px; }
 .hamburger__line:nth-of-type(2) { top: 23px; }
 .hamburger__line:nth-of-type(3) { top: 32px; }
-
 .hamburger.active .hamburger__line:nth-of-type(1) { transform: translateY(9px) rotate(-45deg); }
 .hamburger.active .hamburger__line:nth-of-type(2) { opacity: 0; }
 .hamburger.active .hamburger__line:nth-of-type(3) { transform: translateY(-9px) rotate(45deg); }
@@ -119,20 +129,17 @@ body {
   z-index: 90;
 }
 .nav.active { transform: translateX(0); }
-.nav__list { margin: 0; padding: 100px 0 0; list-style: none; }
-.nav__item { padding: 0 20px; }
-.nav__link {
-  display: block;
-  padding: 15px 0;
-  color: #333;
-  text-decoration: none;
-  border-bottom: 1px solid #eee;
+.nav__list { margin: 0; padding: 80px 0 0; list-style: none; }
+.nav__item { padding: 10px 20px; }
+.nav__item label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+    text-align: left;
 }
-/* メニュー内のセレクトボックス用のスタイル */
 .nav__item select {
     width: 100%;
     padding: 10px;
-    margin-top: 5px;
     border: 1px solid #ccc;
     border-radius: 4px;
     font-size: 1em;
