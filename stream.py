@@ -35,6 +35,9 @@ app.config['HEALTHZ_PATH'] = '/healthz'
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'a_super_secret_key')
 socketio = SocketIO(app)
 
+# Renderのドメインからの接続を許可するようにCORSを設定
+socketio = SocketIO(app, cors_allowed_origins="*")
+
 transcribe_running = False
 
 def transcribe_audio_with_api(audio_chunk):
