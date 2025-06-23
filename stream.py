@@ -33,8 +33,6 @@ app = Flask(__name__)
 app.config['HEALTHZ_PATH'] = '/healthz'
 # 非推奨の警告を抑制
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'a_super_secret_key')
-socketio = SocketIO(app)
-
 # Renderのドメインからの接続を許可するようにCORSを設定
 socketio = SocketIO(app, cors_allowed_origins="*")
 
