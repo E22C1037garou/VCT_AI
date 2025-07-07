@@ -5,7 +5,7 @@ gunicorn
 eventlet
 
 # AI (API Client)
-openai
+openai # AzureとOpenAIの両方で利用
 python-dotenv
 
 # Utilities

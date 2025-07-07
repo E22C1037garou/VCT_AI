@@ -1,75 +1,84 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>リアルタイム字幕付き配信ビューワー</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.min.js"></script>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>リアルタイム字幕ビューワー V4</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <header class="header">
-    <button class="hamburger" aria-label="メニュー" aria-controls="nav-menu" aria-expanded="false">
-      <span class="hamburger__line"></span>
-      <span class="hamburger__line"></span>
-    </button>
-  </header>
+    <header class="header">
+        <h1>リアルタイム字幕ビューワー</h1>
+        <button class="hamburger" aria-label="メニュー" aria-controls="nav-menu" aria-expanded="false">
+            <span class="hamburger__line"></span>
+            <span class="hamburger__line"></span>
+            <span class="hamburger__line"></span>
+        </button>
+    </header>
 
-  <nav id="nav-menu" class="nav" aria-hidden="true">
-    <ul class="nav__list">
-      <li class="nav__item">
-        <label for="prompt_style">翻訳スタイル:</label>
-        <select id="prompt_style" name="prompt_style" form="startForm">
-            {% for style_key, style_text in prompt_styles.items() %}
-                {% if style_key == 'serious' %}<option value="serious" selected>真面目な翻訳</option>
-                {% elif style_key == 'casual' %}<option value="casual">フランクな翻訳</option>
-                {% elif style_key == 'humorous' %}<option value="humorous">ユーモアな翻訳</option>
-                {% elif style_key == 'expert' %}<option value="expert">専門家風の翻訳</option>
-                {% endif %}
-            {% endfor %}
+    <nav id="nav-menu" class="nav" aria-hidden="true">
+        <ul class="nav__list">
+            <li class="nav__item">
+                <label for="prompt_style">翻訳スタイル:</label>
+                <select id="prompt_style" name="prompt_style" form="startForm">
+                    {% for style_key, style_text in prompt_styles.items() %}
+                        {% if style_key == 'serious' %}<option value="serious" selected>真面目な翻訳</option>
+                        {% elif style_key == 'casual' %}<option value="casual">フランクな翻訳</option>
+                        {% elif style_key == 'humorous' %}<option value="humorous">ユーモアな翻訳</option>
+                        {% elif style_key == 'expert' %}<option value="expert">専門家風の翻訳</option>
+                        {% endif %}
+                    {% endfor %}
+                </select>
+            </li>
+            <li class="nav__item">
+                <label for="subtitle_size">字幕サイズ:</label>
+                <input type="number" id="subtitle-size" max="40" min="20" value="32"> 
+            </li>
+            <li class="nav__item">
+                <label for="subtitle_color">字幕カラー:</label>
+                <input type ="color" id="submit_color" value="#fff">
+    
+            </li>
+            <li class="nav__item">
+                <label for="subtitle_lang">表示言語:</label>
+                <select id="subtitle_lang">
+                    <option value="ja" selected>日本語訳</option>
+                    <option value="en">英語原文</option>
+                </select>
+            </li>
+            <!-- ↓ 背景色変更 追加 ↓ -->
+    <li class="nav__item">
+        <label for="subtitle_backgroundcolor">背景色</label>
+        <select id="subtitle_backgroundcolor">
+            <option value="white" selected>ライトモード</option>
+            <option value="black">ダークモード</option>
         </select>
-      </li>
-      <li class="nav__item">
-        <label for="subtitle_size">字幕サイズ:</label>
-        <select id="subtitle_size">
-          <option value="20px">小</option>
-          <option value="24px" selected>中</option>
-          <option value="32px">大</option>
-        </select>
-      </li>
-      <li class="nav__item">
-        <label for="subtitle_color">字幕カラー:</label>
-        <select id="subtitle_color">
-          <option value="white" selected>白</option>
-          <option value="yellow">黄</option>
-          <option value="cyan">水色</option>
-        </select>
-      </li>
-      <li class="nav__item">
-        <label for="subtitle_lang">表示言語:</label>
-        <select id="subtitle_lang">
-          <option value="ja" selected>日本語訳</option>
-          <option value="en">英語原文</option>
-        </select>
-      </li>
-    </ul>
-  </nav>
+    </li>
+        </ul>
+    </nav>
+    <div id="container">
+        <div id="controls">
+            <form id="startForm">
+                <input type="text" id="url" name="stream_url" placeholder="YouTube or Twitch Stream URL">
+                <button type="submit" id="startBtn">開始</button>
+                <button type="button" id="stopBtn">停止</button>
+            </form>
+        </div>
 
-  <main>
-    <div class="controls">
-      <form id="startForm">
-        <input type="text" id="urlInput" name="stream_url" placeholder="YouTubeやTwitchのURLを入力" required>
-        <button type="submit">開始</button>
-        <button type="button" id="stopButton">停止</button>
-      </form>
+        <div id="video-container">
+            <iframe id="video-frame" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+            <div id="subtitle-container">
+                <p id="subtitle-text"></p>
+            </div>
+        </div>
+
+        <div id="history-container">
+            <h2>翻訳履歴</h2>
+            <ul id="history-list"></ul>
+        </div>
     </div>
 
-    <div class="main-content">
-      <iframe id="videoFrame" allow="autoplay" allowfullscreen></iframe>
-      <div id="subtitle_output"></div>
-    </div>
-  </main>
-  
-  <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
-</html>
+</html>   
