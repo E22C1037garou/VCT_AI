@@ -1,3 +1,4 @@
+import threading
 import os
 import subprocess
 import io
@@ -8,7 +9,7 @@ from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 from dotenv import load_dotenv
 import openai # 変更
-import threading
+
 
 # .envファイルを読み込み
 load_dotenv()
@@ -151,7 +152,6 @@ def stop():
 def log_pipe(pipe, log_prefix):
     """サブプロセスの標準エラー出力を読み取り、ログに出力する関数"""
     try:
-        # 1行ずつ読み取ってループ
         for line in iter(pipe.readline, b''):
             print(f"[{log_prefix}] {line.decode('utf-8', errors='ignore').strip()}", flush=True)
     finally:
@@ -161,22 +161,20 @@ def transcribe_loop(url):
     global transcribe_running
     print("🔁 リアルタイム文字起こし開始（APIモード）")
 
-    # 変更①: User-Agentを追加してブラウザからのアクセスを偽装
+    # 変更: --loglevel debug を追加して、詳細なログを出力させる
     streamlink_cmd = [
         "streamlink",
+        "--loglevel", "debug", # ★★★ この行を追加 ★★★
         "--stdout",
         url,
         "bestaudio,best",
         "--http-header", "User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
     ]
     
-    # 変更②: stderrを DEVNULL から PIPE に変更し、エラーを補足できるようにする
     stream_proc = subprocess.Popen(streamlink_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    
     ffmpeg_cmd = ["ffmpeg", "-i", "pipe:0", "-f", "s16le", "-acodec", "pcm_s16le", "-ac", "1", "-ar", "16000", "pipe:1"]
     ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=stream_proc.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-    # 変更③: 別スレッドでエラー出力を監視
     threading.Thread(target=log_pipe, args=(stream_proc.stderr, "STREAMLINK_ERR"), daemon=True).start()
     threading.Thread(target=log_pipe, args=(ffmpeg_proc.stderr, "FFMPEG_ERR"), daemon=True).start()
 
