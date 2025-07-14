@@ -4,6 +4,7 @@ import io
 import wave
 import collections
 import numpy as np
+import tempfile
 import threading
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
@@ -118,83 +119,70 @@ def log_pipe(pipe, log_prefix):
 def transcribe_loop(url):
     global transcribe_running
     print("🔁 リアルタイム文字起こし開始 (yt-dlp モード)")
-
-    yt_dlp_cmd = ["yt-dlp", "--quiet", "-f", "ba", "-o", "-", url]
-    yt_dlp_proc = subprocess.Popen(yt_dlp_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     
-    ffmpeg_cmd = ["ffmpeg", "-i", "pipe:0", "-f", "s16le", "-acodec", "pcm_s16le", "-ac", "1", "-ar", "16000", "pipe:1"]
-    ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=yt_dlp_proc.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    yt_dlp_proc = None
+    ffmpeg_proc = None
+    cookie_file_path = None
 
-    threading.Thread(target=log_pipe, args=(yt_dlp_proc.stderr, "YT-DLP_ERR"), daemon=True).start()
-    threading.Thread(target=log_pipe, args=(ffmpeg_proc.stderr, "FFMPEG_ERR"), daemon=True).start()
+    try:
+        # --- クッキー処理 ---
+        cookies_content = os.getenv("YOUTUBE_COOKIES")
+        yt_dlp_cmd = ["yt-dlp", "--quiet", "-f", "ba", "-o", "-", url]
+        
+        if cookies_content:
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt', encoding='utf-8') as temp_cookie_file:
+                temp_cookie_file.write(cookies_content)
+                cookie_file_path = temp_cookie_file.name
+            print(f"INFO: YouTubeクッキーを一時ファイルに保存しました: {cookie_file_path}")
+            # yt-dlpにクッキーファイルを指定するオプションを追加
+            yt_dlp_cmd.extend(["--cookies", cookie_file_path])
+        # --- クッキー処理ここまで ---
 
-    context_buffer = collections.deque(maxlen=3)
-    chunk_duration = 4
-    chunk_size = 16000 * 2 * 1 * chunk_duration
+        yt_dlp_proc = subprocess.Popen(yt_dlp_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        ffmpeg_cmd = ["ffmpeg", "-i", "pipe:0", "-f", "s16le", "-acodec", "pcm_s16le", "-ac", "1", "-ar", "16000", "pipe:1"]
+        ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=yt_dlp_proc.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-    while transcribe_running:
-        audio_chunk_raw = ffmpeg_proc.stdout.read(chunk_size)
-        if not audio_chunk_raw:
-            print("INFO: ffmpeg stream ended. Exiting loop.")
-            break
-        try:
-            source_text = transcribe_audio_with_api(audio_chunk_raw)
-            if not source_text:
-                continue
+        threading.Thread(target=log_pipe, args=(yt_dlp_proc.stderr, "YT-DLP_ERR"), daemon=True).start()
+        threading.Thread(target=log_pipe, args=(ffmpeg_proc.stderr, "FFMPEG_ERR"), daemon=True).start()
 
-            detected_lang = detect_language_of_text(source_text)
-            print(f"📝 {detected_lang.upper()}: {source_text}")
-            
-            context_for_api = "\n".join(context_buffer)
-            context_buffer.append(source_text)
+        context_buffer = collections.deque(maxlen=3)
+        chunk_duration = 4
+        chunk_size = 16000 * 2 * 1 * chunk_duration
 
-            for sid, settings in client_settings.copy().items():
-                target_lang = settings.get('target_lang', 'ja')
-                style = settings.get('style', 'serious')
-                translated_text = source_text if detected_lang == target_lang else translate_with_chatgpt(context_for_api, detected_lang, target_lang, style)
-                if translated_text and translated_text.strip():
-                    socketio.emit("new_subtitle", {"original": source_text, "translated": translated_text}, room=sid)
-        except Exception as e:
-            print(f"❌ メインループエラー: {e}")
+        while transcribe_running:
+            audio_chunk_raw = ffmpeg_proc.stdout.read(chunk_size)
+            if not audio_chunk_raw:
+                print("INFO: ffmpeg stream ended. Exiting loop.")
+                break
+            # ... (以降の文字起こし・翻訳ループは変更なし) ...
+            try:
+                source_text = transcribe_audio_with_api(audio_chunk_raw)
+                if not source_text:
+                    continue
 
-    if yt_dlp_proc.poll() is None: yt_dlp_proc.kill()
-    if ffmpeg_proc.poll() is None: ffmpeg_proc.kill()
-    transcribe_running = False
-    print("🛑 停止しました")
+                detected_lang = detect_language_of_text(source_text)
+                print(f"📝 {detected_lang.upper()}: {source_text}")
+                
+                context_for_api = "\n".join(context_buffer)
+                context_buffer.append(source_text)
 
+                for sid, settings in client_settings.copy().items():
+                    target_lang = settings.get('target_lang', 'ja')
+                    style = settings.get('style', 'serious')
+                    translated_text = source_text if detected_lang == target_lang else translate_with_chatgpt(context_for_api, detected_lang, target_lang, style)
+                    if translated_text and translated_text.strip():
+                        socketio.emit("new_subtitle", {"original": source_text, "translated": translated_text}, room=sid)
+            except Exception as e:
+                print(f"❌ メインループエラー: {e}")
 
-@app.route("/")
-def index(): return render_template("index.html", prompt_styles=PROMPT_STYLES)
-
-@socketio.on('connect')
-def handle_connect():
-    sid = request.sid
-    client_settings[sid] = {'style': 'serious', 'target_lang': 'ja'}
-    print(f"✅ クライアント接続: {sid}")
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    sid = request.sid
-    if sid in client_settings: del client_settings[sid]
-    print(f"❌ クライアント切断: {sid}")
-
-@socketio.on('update_settings')
-def handle_settings_update(data):
-    sid = request.sid
-    if sid in client_settings:
-        print(f"⚙️ sid:{sid[-4:]} の設定変更: {data}")
-        client_settings[sid].update(data)
-
-@app.route("/start", methods=["POST"])
-def start():
-    global transcribe_running
-    if not transcribe_running:
-        transcribe_running = True
-        url = request.form["stream_url"]
-        socketio.start_background_task(target=transcribe_loop, url=url)
-    return "リアルタイム文字起こしと翻訳を開始しました！"
-
-@app.route("/stop", methods=["POST"])
-def stop():
-    global transcribe_running; transcribe_running = False
-    client_settings.clear(); return "停止しました"
+    finally:
+        # --- クリーンアップ処理 ---
+        if yt_dlp_proc and yt_dlp_proc.poll() is None: yt_dlp_proc.kill()
+        if ffmpeg_proc and ffmpeg_proc.poll() is None: ffmpeg_proc.kill()
+        if cookie_file_path and os.path.exists(cookie_file_path):
+            os.remove(cookie_file_path)
+            print("INFO: 一時クッキーファイルを削除しました。")
+        
+        transcribe_running = False
+        print("🛑 停止しました")
