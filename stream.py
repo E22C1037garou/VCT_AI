@@ -125,7 +125,6 @@ def transcribe_loop(url):
     print("🔁 リアルタイム文字起こし開始 (Python API モード)")
     ffmpeg_proc = None
     
-    # --- Streamlink Python API を使用 ---
     try:
         session = Streamlink()
         cookies_content = os.getenv("YOUTUBE_COOKIES")
@@ -135,18 +134,24 @@ def transcribe_loop(url):
                 cookie_file_path = temp_cookie_file.name
                 session.http.load_cookies(cookie_file_path)
             print(f"INFO: YouTubeクッキーをセッションに読み込みました: {cookie_file_path}")
-            os.remove(cookie_file_path) # すぐに削除
+            os.remove(cookie_file_path)
 
-        print("INFO: Streamlinkでストリーム情報を取得中...")
+        # --- ★★★ ここからデバッグログを追加 ★★★ ---
+        print("DEBUG: ---- BEFORE session.streams(url) ----")
         streams = session.streams(url)
+        print("DEBUG: ---- AFTER session.streams(url) ----")
+
         if not streams:
             print("ERROR: Streamlink could not find any playable streams on this URL.")
             transcribe_running = False; return
 
         stream_key = "bestaudio" if "bestaudio" in streams else "best"
         stream = streams[stream_key]
-        print(f"INFO: '{stream_key}' ストリームを開きます。")
+
+        print(f"DEBUG: ---- BEFORE stream.open() for '{stream_key}' ----")
         stream_fd = stream.open()
+        print("DEBUG: ---- AFTER stream.open() ----")
+        # --- ★★★ ここまでデバッグログを追加 ★★★ ---
 
     except NoPluginError:
         print(f"ERROR: Streamlink: No plugin found for URL {url}"); transcribe_running = False; return
@@ -154,20 +159,17 @@ def transcribe_loop(url):
         print(f"ERROR: Streamlink Plugin Error: {e}"); transcribe_running = False; return
     except Exception as e:
         print(f"ERROR: Streamlinkの初期化中に予期せぬエラー: {e}"); transcribe_running = False; return
-    # --- End of Streamlink Setup ---
 
-    # ffmpegプロセスの準備
     ffmpeg_cmd = ["ffmpeg", "-i", "pipe:0", "-f", "s16le", "-acodec", "pcm_s16le", "-ac", "1", "-ar", "16000", "pipe:1"]
     ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     threading.Thread(target=log_pipe, args=(ffmpeg_proc.stderr, "FFMPEG_ERR"), daemon=True).start()
     
-    # Streamlinkからffmpegへのデータ中継を別スレッドで開始
     pipe_thread = threading.Thread(target=pipe_stream_to_ffmpeg, args=(stream_fd, ffmpeg_proc), daemon=True)
     pipe_thread.start()
 
     context_buffer = collections.deque(maxlen=3)
     while transcribe_running:
-        audio_chunk_raw = ffmpeg_proc.stdout.read(16000 * 2 * 4) # 4秒分
+        audio_chunk_raw = ffmpeg_proc.stdout.read(16000 * 2 * 4)
         if not audio_chunk_raw:
             print("INFO: ffmpeg stream ended. Exiting loop.")
             break
@@ -194,37 +196,3 @@ def transcribe_loop(url):
     if ffmpeg_proc and ffmpeg_proc.poll() is None: ffmpeg_proc.kill()
     transcribe_running = False
     print("🛑 停止しました")
-
-# --- Flaskルート定義 ---
-@app.route("/")
-def index(): return render_template("index.html", prompt_styles=PROMPT_STYLES)
-
-@socketio.on('connect')
-def handle_connect():
-    sid = request.sid; client_settings[sid] = {'style': 'serious', 'target_lang': 'ja'}
-    print(f"✅ クライアント接続: {sid}")
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    sid = request.sid
-    if sid in client_settings: del client_settings[sid]
-    print(f"❌ クライアント切断: {sid}")
-
-@socketio.on('update_settings')
-def handle_settings_update(data):
-    sid = request.sid
-    if sid in client_settings: client_settings[sid].update(data)
-
-@app.route("/start", methods=["POST"])
-def start():
-    global transcribe_running
-    if not transcribe_running:
-        transcribe_running = True
-        url = request.form["stream_url"]
-        socketio.start_background_task(target=transcribe_loop, url=url)
-    return "リアルタイム文字起こしと翻訳を開始しました！"
-
-@app.route("/stop", methods=["POST"])
-def stop():
-    global transcribe_running; transcribe_running = False
-    client_settings.clear(); return "停止しました"
