@@ -122,67 +122,48 @@ def log_pipe(pipe, log_prefix):
 
 def transcribe_loop(url):
     global transcribe_running
-    print("🔁 リアルタイム文字起こし開始 (Python API モード)")
-    ffmpeg_proc = None
+    print("🔁 リアルタイム文字起こし開始 (yt-dlp モード)")
+
+    # 変更点: streamlinkの代わりにyt-dlpを使用
+    # -q: 進行状況などのメッセージを非表示に
+    # -f ba: bestaudio (最適な音声のみ) を選択
+    # -o -: 標準出力にデータを書き出す
+    yt_dlp_cmd = [
+        "yt-dlp",
+        "--quiet",
+        "-f", "ba",
+        "-o", "-",
+        url
+    ]
     
-    try:
-        session = Streamlink()
-        cookies_content = os.getenv("YOUTUBE_COOKIES")
-        if cookies_content:
-            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt', encoding='utf-8') as temp_cookie_file:
-                temp_cookie_file.write(cookies_content)
-                cookie_file_path = temp_cookie_file.name
-                session.http.load_cookies(cookie_file_path)
-            print(f"INFO: YouTubeクッキーをセッションに読み込みました: {cookie_file_path}")
-            os.remove(cookie_file_path)
-
-        # --- ★★★ ここからデバッグログを追加 ★★★ ---
-        print("DEBUG: ---- BEFORE session.streams(url) ----")
-        streams = session.streams(url)
-        print("DEBUG: ---- AFTER session.streams(url) ----")
-
-        if not streams:
-            print("ERROR: Streamlink could not find any playable streams on this URL.")
-            transcribe_running = False; return
-
-        stream_key = "bestaudio" if "bestaudio" in streams else "best"
-        stream = streams[stream_key]
-
-        print(f"DEBUG: ---- BEFORE stream.open() for '{stream_key}' ----")
-        stream_fd = stream.open()
-        print("DEBUG: ---- AFTER stream.open() ----")
-        # --- ★★★ ここまでデバッグログを追加 ★★★ ---
-
-    except NoPluginError:
-        print(f"ERROR: Streamlink: No plugin found for URL {url}"); transcribe_running = False; return
-    except PluginError as e:
-        print(f"ERROR: Streamlink Plugin Error: {e}"); transcribe_running = False; return
-    except Exception as e:
-        print(f"ERROR: Streamlinkの初期化中に予期せぬエラー: {e}"); transcribe_running = False; return
-
+    yt_dlp_proc = subprocess.Popen(yt_dlp_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    
     ffmpeg_cmd = ["ffmpeg", "-i", "pipe:0", "-f", "s16le", "-acodec", "pcm_s16le", "-ac", "1", "-ar", "16000", "pipe:1"]
-    ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=yt_dlp_proc.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    # yt-dlpとffmpegからのエラーをログに出力するためのスレッド
+    threading.Thread(target=log_pipe, args=(yt_dlp_proc.stderr, "YT-DLP_ERR"), daemon=True).start()
     threading.Thread(target=log_pipe, args=(ffmpeg_proc.stderr, "FFMPEG_ERR"), daemon=True).start()
-    
-    pipe_thread = threading.Thread(target=pipe_stream_to_ffmpeg, args=(stream_fd, ffmpeg_proc), daemon=True)
-    pipe_thread.start()
 
     context_buffer = collections.deque(maxlen=3)
+    chunk_duration = 4
+    chunk_size = 16000 * 2 * 1 * chunk_duration
+
     while transcribe_running:
-        audio_chunk_raw = ffmpeg_proc.stdout.read(16000 * 2 * 4)
+        audio_chunk_raw = ffmpeg_proc.stdout.read(chunk_size)
         if not audio_chunk_raw:
             print("INFO: ffmpeg stream ended. Exiting loop.")
             break
-        
         try:
             source_text = transcribe_audio_with_api(audio_chunk_raw)
-            if not source_text: continue
-            
+            if not source_text:
+                continue
+
             detected_lang = detect_language_of_text(source_text)
             print(f"📝 {detected_lang.upper()}: {source_text}")
             
-            context_buffer.append(source_text)
             context_for_api = "\n".join(context_buffer)
+            context_buffer.append(source_text) # 順番を修正
 
             for sid, settings in client_settings.copy().items():
                 target_lang = settings.get('target_lang', 'ja')
@@ -193,6 +174,7 @@ def transcribe_loop(url):
         except Exception as e:
             print(f"❌ メインループエラー: {e}")
 
-    if ffmpeg_proc and ffmpeg_proc.poll() is None: ffmpeg_proc.kill()
+    if yt_dlp_proc.poll() is None: yt_dlp_proc.kill()
+    if ffmpeg_proc.poll() is None: ffmpeg_proc.kill()
     transcribe_running = False
     print("🛑 停止しました")
