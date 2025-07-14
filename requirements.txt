@@ -6,4 +6,3 @@ numpy==1.26.4
 gunicorn==22.0.0
 yt-dlp==2024.07.09
 eventlet==0.36.1
-requests==2.31.0
