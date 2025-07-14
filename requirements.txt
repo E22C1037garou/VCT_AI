@@ -1,16 +1,14 @@
-# Flask Web Framework
-flask
-flask-socketio
+# Webフレームワークと本番用サーバー
+Flask
+Flask-SocketIO
+gunicorn
 
-# AI & Audio Processing
+# OpenAI API と環境変数管理
 openai
-openai-whisper
-numpy
-soundfile
-torch
-torchaudio
-pyannote.audio
-
-# Utilities
 python-dotenv
+
+# YouTube等のストリームを扱う場合
 yt-dlp
+
+# 音声データ処理で必要になることが多い
+numpy
