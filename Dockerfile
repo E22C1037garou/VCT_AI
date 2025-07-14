@@ -1,24 +1,22 @@
-# 1. ベースとなるOSとPythonのバージョンを指定
-FROM python:3.11-slim
+# ベースとなる公式Pythonイメージを指定
+FROM python:3.10-slim
 
-# 2. システムのパッケージリストを更新し、必要なツールをインストール
-RUN apt-get update && apt-get install -y \
-    ffmpeg \
-    streamlink \
-    && rm -rf /var/lib/apt/lists/*
+# 依存関係のあるシステムツール (ffmpeg) をインストール
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 
-# 3. アプリケーション用の作業ディレクトリを作成
+# コンテナ内の作業ディレクトリを設定
 WORKDIR /app
 
-# 4. requirements.txtをコピーして、Pythonライブラリをインストール
+# requirements.txtをコンテナにコピー
 COPY requirements.txt .
+
+# requirements.txtに記載されたライブラリをインストール
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 5. アプリケーションの全ファイルをコピー
+# プロジェクトの全てのファイルを作業ディレクトリにコピー
 COPY . .
 
-# 6. Renderが使用するポート番号を指定
-EXPOSE 10000
-
-# 7. アプリケーションの起動コマンド
-CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", "--threads", "100", "--timeout", "120", "--bind", "0.0.0.0:10000", "stream:app"]
+# アプリケーションの起動コマンド
+# Renderは自動的にPORT環境変数を設定します
+# Flask-SocketIOと連携するため、gunicornにeventletワーカーを指定します
+CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", "--bind", "0.0.0.0:${PORT:-10000}", "stream:app"]

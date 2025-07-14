@@ -1,14 +1,8 @@
-# Webフレームワークと本番用サーバー
-Flask
-Flask-SocketIO
-gunicorn
-
-# OpenAI API と環境変数管理
-openai
-python-dotenv
-
-# YouTube等のストリームを扱う場合
-yt-dlp
-
-# 音声データ処理で必要になることが多い
-numpy
+Flask==3.0.3
+Flask-SocketIO==5.3.6
+python-dotenv==1.0.1
+openai==1.35.3
+numpy==1.26.4
+gunicorn==22.0.0
+streamlink==6.7.2
+eventlet==0.36.1
