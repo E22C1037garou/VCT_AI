@@ -19,4 +19,4 @@ COPY . .
 # アプリケーションの起動コマンド
 # Renderは自動的にPORT環境変数を設定します
 # Flask-SocketIOと連携するため、gunicornにeventletワーカーを指定します
-CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", "--bind", "0.0.0.0:${PORT:-10000}", "stream:app"]
+CMD gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:${PORT:-10000} stream:app
