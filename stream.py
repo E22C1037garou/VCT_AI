@@ -8,6 +8,7 @@ from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 from dotenv import load_dotenv
 import openai # 変更
+import threading
 
 # .envファイルを読み込み
 load_dotenv()
@@ -147,39 +148,55 @@ def stop():
     global transcribe_running; transcribe_running = False
     client_settings.clear(); return "停止しました"
 
+def log_pipe(pipe, log_prefix):
+    """サブプロセスの標準エラー出力を読み取り、ログに出力する関数"""
+    try:
+        # 1行ずつ読み取ってループ
+        for line in iter(pipe.readline, b''):
+            print(f"[{log_prefix}] {line.decode('utf-8', errors='ignore').strip()}", flush=True)
+    finally:
+        pipe.close()
+
 def transcribe_loop(url):
     global transcribe_running
     print("🔁 リアルタイム文字起こし開始（APIモード）")
-    streamlink_cmd = ["streamlink", "--stdout", url, "bestaudio,best"]
-    stream_proc = subprocess.Popen(streamlink_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    ffmpeg_cmd = ["ffmpeg", "-i", "pipe:0", "-f", "s16le", "-acodec", "pcm_s16le", "-ac", "1", "-ar", "16000", "pipe:1"]
-    ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=stream_proc.stdout, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+    # 変更①: User-Agentを追加してブラウザからのアクセスを偽装
+    streamlink_cmd = [
+        "streamlink",
+        "--stdout",
+        url,
+        "bestaudio,best",
+        "--http-header", "User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+    ]
     
+    # 変更②: stderrを DEVNULL から PIPE に変更し、エラーを補足できるようにする
+    stream_proc = subprocess.Popen(streamlink_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    
+    ffmpeg_cmd = ["ffmpeg", "-i", "pipe:0", "-f", "s16le", "-acodec", "pcm_s16le", "-ac", "1", "-ar", "16000", "pipe:1"]
+    ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=stream_proc.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    # 変更③: 別スレッドでエラー出力を監視
+    threading.Thread(target=log_pipe, args=(stream_proc.stderr, "STREAMLINK_ERR"), daemon=True).start()
+    threading.Thread(target=log_pipe, args=(ffmpeg_proc.stderr, "FFMPEG_ERR"), daemon=True).start()
+
     chunk_duration = 4
     chunk_size = 16000 * 2 * 1 * chunk_duration
     
     context_buffer = collections.deque(maxlen=3)
 
     while transcribe_running:
-        # 【デバッグログ追加①】ffmpegからデータを読み込めているか確認
         audio_chunk_raw = ffmpeg_proc.stdout.read(chunk_size)
-        print(f"DEBUG: Read {len(audio_chunk_raw)} bytes from ffmpeg.")
-
         if not audio_chunk_raw: 
-            print("DEBUG: ffmpeg stream ended. Exiting loop.") # 【デバッグログ追加②】
+            print("INFO: ffmpeg stream ended. Exiting loop.")
             break
         try:
-            # 【デバッグログ追加③】無音判定の前の音声レベルを確認
-            audio_level = np.abs(np.frombuffer(audio_chunk_raw, dtype=np.int16)).max()
-            print(f"DEBUG: Audio level max is {audio_level}.")
-
             source_text = transcribe_audio_with_api(audio_chunk_raw)
             if not source_text:
-                print("DEBUG: Skipped chunk (silent or API returned empty).") # 【デバッグログ追加④】
                 continue
 
             detected_lang = detect_language_of_text(source_text)
-            print(f"📝 {detected_lang.upper()}: {source_text}") # このログが表示されれば成功
+            print(f"📝 {detected_lang.upper()}: {source_text}")
             
             context_buffer.append(source_text)
             context_for_api = "\n".join(context_buffer)
@@ -187,9 +204,7 @@ def transcribe_loop(url):
             for sid, settings in client_settings.copy().items():
                 target_lang = settings.get('target_lang', 'ja')
                 style = settings.get('style', 'serious')
-
                 translated_text = source_text if detected_lang == target_lang else translate_with_chatgpt(context_for_api, detected_lang, target_lang, style)
-
                 if translated_text and translated_text.strip():
                     socketio.emit("new_subtitle", {"original": source_text, "translated": translated_text}, room=sid)
         except Exception as e:
