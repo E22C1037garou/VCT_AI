@@ -3,25 +3,23 @@ import subprocess
 import io
 import wave
 import collections
-import re
 import numpy as np
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 from dotenv import load_dotenv
-from openai import AzureOpenAI, OpenAI
+import openai # 変更
 
 # .envファイルを読み込み
 load_dotenv()
 
-# === クライアント設定 ===
-azure_client = AzureOpenAI(
-    azure_endpoint=os.getenv("ENDPOINT_URL"),
-    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-    api_version="2024-05-01-preview",
-)
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# === APIキーとエンドポイントを変数として保持 ===
+AZURE_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+AZURE_ENDPOINT_URL = os.getenv("ENDPOINT_URL")
+AZURE_DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+AZURE_API_VERSION = "2023-05-15" # 旧ライブラリと互換性のある安定バージョン
 
-# === プロンプト定義 ===
+# === プロンプト定義 (変更なし) ===
 PROMPT_STYLES = {
     "serious": "Translate formally and accurately.",
     "casual": "Translate in a natural, casual style. Feel free to use appropriate emojis.",
@@ -36,7 +34,7 @@ PROMPT_RULE = (
 )
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'a_super_secret_key'
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'a_super_secret_key') # 変更: 環境変数から取得
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 transcribe_running = False
@@ -51,24 +49,34 @@ def transcribe_audio_with_api(audio_chunk):
         wf.writeframes(audio_chunk)
     wav_buffer.seek(0)
     try:
-        transcript = openai_client.audio.transcriptions.create(
-            model="whisper-1", file=("audio.wav", wav_buffer), response_format="text"
+        # 旧バージョンの書き方に変更
+        transcript = openai.Audio.transcribe(
+            model="whisper-1",
+            file=wav_buffer,
+            file_name="audio.wav", # ファイル名を指定
+            api_key=OPENAI_API_KEY # APIキーを直接指定
         )
-        return transcript.strip()
+        return transcript["text"].strip() # レスポンスは辞書型
     except Exception as e:
         print(f"❌ Whisper API エラー: {e}"); return ""
 
 def detect_language_of_text(text):
     try:
-        response = azure_client.chat.completions.create(
-            model=os.getenv("DEPLOYMENT_NAME"),
+        # 旧バージョンの書き方に変更
+        response = openai.ChatCompletion.create(
+            engine=AZURE_DEPLOYMENT_NAME,
+            api_key=AZURE_API_KEY,
+            api_base=AZURE_ENDPOINT_URL,
+            api_type="azure",
+            api_version=AZURE_API_VERSION,
             messages=[
                 {"role": "system", "content": "You are a language detection expert. Identify the language of the following text and respond with only the two-letter ISO 639-1 code (e.g., 'en', 'ja', 'ko')."},
                 {"role": "user", "content": text}
             ],
             temperature=0, max_tokens=5
         )
-        return response.choices[0].message.content.strip().lower()
+        # レスポンスは辞書型
+        return response["choices"][0]["message"]["content"].strip().lower()
     except Exception as e:
         print(f"❌ 言語検出AIエラー: {e}"); return "unknown"
 
@@ -83,8 +91,22 @@ def generate_dynamic_prompt(source_lang, target_lang, style):
 def translate_with_chatgpt(context_text, source_lang, target_lang, style):
     system_prompt = generate_dynamic_prompt(source_lang, target_lang, style)
     try:
-        response = azure_client.chat.completions.create(model=os.getenv("DEPLOYMENT_NAME"), messages=[{"role": "system", "content": system_prompt},{"role": "user", "content": context_text}], temperature=0.1, max_tokens=150)
-        content = response.choices[0].message.content.strip()
+        # 旧バージョンの書き方に変更
+        response = openai.ChatCompletion.create(
+            engine=AZURE_DEPLOYMENT_NAME,
+            api_key=AZURE_API_KEY,
+            api_base=AZURE_ENDPOINT_URL,
+            api_type="azure",
+            api_version=AZURE_API_VERSION,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": context_text}
+            ],
+            temperature=0.1,
+            max_tokens=150
+        )
+        # レスポンスは辞書型
+        content = response["choices"][0]["message"]["content"].strip()
         if "I'm sorry" in content or "cannot" in content or "申し訳ありません" in content: return ""
         return content
     except Exception as e: print(f"❌ 翻訳AIエラー: {e}"); return ""
@@ -136,6 +158,8 @@ def transcribe_loop(url):
     chunk_duration = 4
     chunk_size = 16000 * 2 * 1 * chunk_duration
     
+    context_buffer = collections.deque(maxlen=3) # 修正: バッファをループの外に移動
+
     while transcribe_running:
         audio_chunk_raw = ffmpeg_proc.stdout.read(chunk_size)
         if not audio_chunk_raw: break
@@ -146,11 +170,10 @@ def transcribe_loop(url):
             detected_lang = detect_language_of_text(source_text)
             print(f"📝 {detected_lang.upper()}: {source_text}")
             
-            for sid, settings in client_settings.copy().items():
-                context_buffer = collections.deque(maxlen=3)
-                context_buffer.append(source_text)
-                context_for_api = "\n".join(context_buffer)
+            context_buffer.append(source_text)
+            context_for_api = "\n".join(context_buffer)
 
+            for sid, settings in client_settings.copy().items():
                 target_lang = settings.get('target_lang', 'ja')
                 style = settings.get('style', 'serious')
 
