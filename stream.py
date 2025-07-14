@@ -5,13 +5,10 @@ import wave
 import collections
 import numpy as np
 import threading
-import tempfile
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 from dotenv import load_dotenv
 import openai
-# Streamlinkをライブラリとしてインポート
-from streamlink import Streamlink, NoPluginError, PluginError
 
 # .envファイルを読み込み
 load_dotenv()
@@ -21,7 +18,7 @@ AZURE_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
 AZURE_ENDPOINT_URL = os.getenv("ENDPOINT_URL")
 AZURE_DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-AZURE_API_VERSION = "2023-05-15"
+AZURE_API_VERSION = "2023-05-15" 
 
 # プロンプト定義
 PROMPT_STYLES = {
@@ -54,7 +51,10 @@ def transcribe_audio_with_api(audio_chunk):
     wav_buffer.seek(0)
     try:
         transcript = openai.Audio.transcribe(
-            model="whisper-1", file=wav_buffer, file_name="audio.wav", api_key=OPENAI_API_KEY
+            model="whisper-1",
+            file=wav_buffer,
+            file_name="audio.wav",
+            api_key=OPENAI_API_KEY
         )
         return transcript["text"].strip()
     except Exception as e:
@@ -63,10 +63,13 @@ def transcribe_audio_with_api(audio_chunk):
 def detect_language_of_text(text):
     try:
         response = openai.ChatCompletion.create(
-            engine=AZURE_DEPLOYMENT_NAME, api_key=AZURE_API_KEY, api_base=AZURE_ENDPOINT_URL,
-            api_type="azure", api_version=AZURE_API_VERSION,
+            engine=AZURE_DEPLOYMENT_NAME,
+            api_key=AZURE_API_KEY,
+            api_base=AZURE_ENDPOINT_URL,
+            api_type="azure",
+            api_version=AZURE_API_VERSION,
             messages=[
-                {"role": "system", "content": "You are a language detection expert..."},
+                {"role": "system", "content": "You are a language detection expert. Identify the language of the following text and respond with only the two-letter ISO 639-1 code (e.g., 'en', 'ja', 'ko')."},
                 {"role": "user", "content": text}
             ],
             temperature=0, max_tokens=5
@@ -80,37 +83,29 @@ def generate_dynamic_prompt(source_lang, target_lang, style):
     source_name = lang_map.get(source_lang, source_lang)
     target_name = lang_map.get(target_lang, target_lang)
     style_instruction = PROMPT_STYLES.get(style, PROMPT_STYLES["serious"])
-    system_prompt = (f"You are a professional interpreter... Translate it {style_instruction}")
+    system_prompt = (f"You are a professional interpreter. Your task is to translate the final line of the following conversation, which is in {source_name}, into {target_name}. The preceding lines are for context only. Translate it {style_instruction}")
     return system_prompt + PROMPT_RULE
 
 def translate_with_chatgpt(context_text, source_lang, target_lang, style):
     system_prompt = generate_dynamic_prompt(source_lang, target_lang, style)
     try:
         response = openai.ChatCompletion.create(
-            engine=AZURE_DEPLOYMENT_NAME, api_key=AZURE_API_KEY, api_base=AZURE_ENDPOINT_URL,
-            api_type="azure", api_version=AZURE_API_VERSION,
-            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": context_text}],
-            temperature=0.1, max_tokens=150
+            engine=AZURE_DEPLOYMENT_NAME,
+            api_key=AZURE_API_KEY,
+            api_base=AZURE_ENDPOINT_URL,
+            api_type="azure",
+            api_version=AZURE_API_VERSION,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": context_text}
+            ],
+            temperature=0.1,
+            max_tokens=150
         )
         content = response["choices"][0]["message"]["content"].strip()
         if "I'm sorry" in content or "cannot" in content or "申し訳ありません" in content: return ""
         return content
     except Exception as e: print(f"❌ 翻訳AIエラー: {e}"); return ""
-
-def pipe_stream_to_ffmpeg(stream_fd, ffmpeg_proc):
-    """Streamlinkからのデータをffmpegに中継する関数"""
-    try:
-        while transcribe_running:
-            chunk = stream_fd.read(4096)
-            if not chunk:
-                break
-            ffmpeg_proc.stdin.write(chunk)
-    except Exception as e:
-        print(f"ERROR: Pipe stream failed: {e}")
-    finally:
-        print("INFO: Closing stream pipe to ffmpeg.")
-        stream_fd.close()
-        ffmpeg_proc.stdin.close()
 
 def log_pipe(pipe, log_prefix):
     """サブプロセスの標準エラー出力を読み取り、ログに出力する関数"""
@@ -124,24 +119,12 @@ def transcribe_loop(url):
     global transcribe_running
     print("🔁 リアルタイム文字起こし開始 (yt-dlp モード)")
 
-    # 変更点: streamlinkの代わりにyt-dlpを使用
-    # -q: 進行状況などのメッセージを非表示に
-    # -f ba: bestaudio (最適な音声のみ) を選択
-    # -o -: 標準出力にデータを書き出す
-    yt_dlp_cmd = [
-        "yt-dlp",
-        "--quiet",
-        "-f", "ba",
-        "-o", "-",
-        url
-    ]
-    
+    yt_dlp_cmd = ["yt-dlp", "--quiet", "-f", "ba", "-o", "-", url]
     yt_dlp_proc = subprocess.Popen(yt_dlp_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     
     ffmpeg_cmd = ["ffmpeg", "-i", "pipe:0", "-f", "s16le", "-acodec", "pcm_s16le", "-ac", "1", "-ar", "16000", "pipe:1"]
     ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=yt_dlp_proc.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-    # yt-dlpとffmpegからのエラーをログに出力するためのスレッド
     threading.Thread(target=log_pipe, args=(yt_dlp_proc.stderr, "YT-DLP_ERR"), daemon=True).start()
     threading.Thread(target=log_pipe, args=(ffmpeg_proc.stderr, "FFMPEG_ERR"), daemon=True).start()
 
@@ -163,7 +146,7 @@ def transcribe_loop(url):
             print(f"📝 {detected_lang.upper()}: {source_text}")
             
             context_for_api = "\n".join(context_buffer)
-            context_buffer.append(source_text) # 順番を修正
+            context_buffer.append(source_text)
 
             for sid, settings in client_settings.copy().items():
                 target_lang = settings.get('target_lang', 'ja')
@@ -178,3 +161,40 @@ def transcribe_loop(url):
     if ffmpeg_proc.poll() is None: ffmpeg_proc.kill()
     transcribe_running = False
     print("🛑 停止しました")
+
+
+@app.route("/")
+def index(): return render_template("index.html", prompt_styles=PROMPT_STYLES)
+
+@socketio.on('connect')
+def handle_connect():
+    sid = request.sid
+    client_settings[sid] = {'style': 'serious', 'target_lang': 'ja'}
+    print(f"✅ クライアント接続: {sid}")
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    sid = request.sid
+    if sid in client_settings: del client_settings[sid]
+    print(f"❌ クライアント切断: {sid}")
+
+@socketio.on('update_settings')
+def handle_settings_update(data):
+    sid = request.sid
+    if sid in client_settings:
+        print(f"⚙️ sid:{sid[-4:]} の設定変更: {data}")
+        client_settings[sid].update(data)
+
+@app.route("/start", methods=["POST"])
+def start():
+    global transcribe_running
+    if not transcribe_running:
+        transcribe_running = True
+        url = request.form["stream_url"]
+        socketio.start_background_task(target=transcribe_loop, url=url)
+    return "リアルタイム文字起こしと翻訳を開始しました！"
+
+@app.route("/stop", methods=["POST"])
+def stop():
+    global transcribe_running; transcribe_running = False
+    client_settings.clear(); return "停止しました"
