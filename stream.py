@@ -4,8 +4,8 @@ import io
 import wave
 import collections
 import numpy as np
-import tempfile
 import threading
+import tempfile
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 from dotenv import load_dotenv
@@ -19,7 +19,7 @@ AZURE_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
 AZURE_ENDPOINT_URL = os.getenv("ENDPOINT_URL")
 AZURE_DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-AZURE_API_VERSION = "2023-05-15" 
+AZURE_API_VERSION = "2023-05-15"
 
 # プロンプト定義
 PROMPT_STYLES = {
@@ -109,9 +109,7 @@ def translate_with_chatgpt(context_text, source_lang, target_lang, style):
     except Exception as e: print(f"❌ 翻訳AIエラー: {e}"); return ""
 
 def log_pipe(pipe, log_prefix):
-    """サブプロセスの標準エラー出力を読み取り、ログに出力する関数"""
     try:
-        # 1行ずつ読み取ってループ
         for line in iter(pipe.readline, b''):
             print(f"[{log_prefix}] {line.decode('utf-8', errors='ignore').strip()}", flush=True)
     finally:
@@ -126,7 +124,6 @@ def transcribe_loop(url):
     cookie_file_path = None
 
     try:
-        # --- クッキー処理 ---
         cookies_content = os.getenv("YOUTUBE_COOKIES")
         yt_dlp_cmd = ["yt-dlp", "--quiet", "-f", "ba", "-o", "-", url]
         
@@ -135,9 +132,7 @@ def transcribe_loop(url):
                 temp_cookie_file.write(cookies_content)
                 cookie_file_path = temp_cookie_file.name
             print(f"INFO: YouTubeクッキーを一時ファイルに保存しました: {cookie_file_path}")
-            # yt-dlpにクッキーファイルを指定するオプションを追加
             yt_dlp_cmd.extend(["--cookies", cookie_file_path])
-        # --- クッキー処理ここまで ---
 
         yt_dlp_proc = subprocess.Popen(yt_dlp_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
@@ -156,7 +151,6 @@ def transcribe_loop(url):
             if not audio_chunk_raw:
                 print("INFO: ffmpeg stream ended. Exiting loop.")
                 break
-            # ... (以降の文字起こし・翻訳ループは変更なし) ...
             try:
                 source_text = transcribe_audio_with_api(audio_chunk_raw)
                 if not source_text:
@@ -178,7 +172,6 @@ def transcribe_loop(url):
                 print(f"❌ メインループエラー: {e}")
 
     finally:
-        # --- クリーンアップ処理 ---
         if yt_dlp_proc and yt_dlp_proc.poll() is None: yt_dlp_proc.kill()
         if ffmpeg_proc and ffmpeg_proc.poll() is None: ffmpeg_proc.kill()
         if cookie_file_path and os.path.exists(cookie_file_path):
@@ -187,3 +180,44 @@ def transcribe_loop(url):
         
         transcribe_running = False
         print("🛑 停止しました")
+
+# --- ここから下が抜け落ちていた可能性のある部分です ---
+@app.route("/")
+def index():
+    return render_template("index.html", prompt_styles=PROMPT_STYLES)
+
+@socketio.on('connect')
+def handle_connect():
+    sid = request.sid
+    client_settings[sid] = {'style': 'serious', 'target_lang': 'ja'}
+    print(f"✅ クライアント接続: {sid}")
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    sid = request.sid
+    if sid in client_settings:
+        del client_settings[sid]
+    print(f"❌ クライアント切断: {sid}")
+
+@socketio.on('update_settings')
+def handle_settings_update(data):
+    sid = request.sid
+    if sid in client_settings:
+        print(f"⚙️ sid:{sid[-4:]} の設定変更: {data}")
+        client_settings[sid].update(data)
+
+@app.route("/start", methods=["POST"])
+def start():
+    global transcribe_running
+    if not transcribe_running:
+        transcribe_running = True
+        url = request.form["stream_url"]
+        socketio.start_background_task(target=transcribe_loop, url=url)
+    return "リアルタイム文字起こしと翻訳を開始しました！"
+
+@app.route("/stop", methods=["POST"])
+def stop():
+    global transcribe_running
+    transcribe_running = False
+    client_settings.clear()
+    return "停止しました"
