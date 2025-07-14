@@ -49,12 +49,16 @@ def transcribe_audio_with_api(audio_chunk):
     with wave.open(wav_buffer, 'wb') as wf:
         wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(16000)
         wf.writeframes(audio_chunk)
+    
+    # 【解決策】BytesIOオブジェクトに手動でname属性を追加します
+    wav_buffer.name = 'audio.wav'
     wav_buffer.seek(0)
+
     try:
+        # 【解決策】機能していなかったfile_name引数を削除します
         transcript = openai.Audio.transcribe(
             model="whisper-1",
             file=wav_buffer,
-            file_name="audio.wav",
             api_key=OPENAI_API_KEY
         )
         return transcript["text"].strip()
