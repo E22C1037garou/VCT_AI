@@ -161,18 +161,31 @@ def transcribe_loop(url):
     global transcribe_running
     print("🔁 リアルタイム文字起こし開始（APIモード）")
 
-    # 変更: --loglevel debug を追加して、詳細なログを出力させる
+    # 環境変数からクッキー情報を取得
+    cookies_content = os.getenv("YOUTUBE_COOKIES")
+    cookie_file_path = None
+
+    if cookies_content:
+        # 一時ファイルにクッキーを書き込む
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt', encoding='utf-8') as temp_cookie_file:
+            temp_cookie_file.write(cookies_content)
+            cookie_file_path = temp_cookie_file.name
+        print(f"INFO: YouTubeクッキーを一時ファイルに保存しました: {cookie_file_path}")
+
     streamlink_cmd = [
         "streamlink",
-        "--loglevel", "debug", # ★★★ この行を追加 ★★★
+        # "--loglevel", "debug", # デバッグ完了のためコメントアウトしてOK
         "--stdout",
         url,
         "bestaudio,best",
         "--http-header", "User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
     ]
     
+    # ★★★ クッキーファイルが設定されていれば、コマンドに追加 ★★★
+    if cookie_file_path:
+        streamlink_cmd.extend(["--youtube-cookies", cookie_file_path])
+
     stream_proc = subprocess.Popen(streamlink_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    ffmpeg_cmd = ["ffmpeg", "-i", "pipe:0", "-f", "s16le", "-acodec", "pcm_s16le", "-ac", "1", "-ar", "16000", "pipe:1"]
     ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=stream_proc.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     threading.Thread(target=log_pipe, args=(stream_proc.stderr, "STREAMLINK_ERR"), daemon=True).start()
@@ -210,5 +223,11 @@ def transcribe_loop(url):
     
     if stream_proc.poll() is None: stream_proc.kill()
     if ffmpeg_proc.poll() is None: ffmpeg_proc.kill()
+    
+    # 一時クッキーファイルを削除
+    if cookie_file_path and os.path.exists(cookie_file_path):
+        os.remove(cookie_file_path)
+        print("INFO: 一時クッキーファイルを削除しました。")
+
     transcribe_running = False
     print("🛑 停止しました")
