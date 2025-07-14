@@ -125,7 +125,7 @@ def transcribe_loop(url):
 
     try:
         cookies_content = os.getenv("YOUTUBE_COOKIES")
-        yt_dlp_cmd = ["yt-dlp", "--quiet", "-f", "ba", "-o", "-", url]
+        yt_dlp_cmd = ["yt-dlp", "--quiet", "-f", "bestaudio/best", "-o", "-", url]
         
         if cookies_content:
             with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt', encoding='utf-8') as temp_cookie_file:
