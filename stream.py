@@ -111,6 +111,7 @@ def translate_with_chatgpt(context_text, source_lang, target_lang, style):
 def log_pipe(pipe, log_prefix):
     """サブプロセスの標準エラー出力を読み取り、ログに出力する関数"""
     try:
+        # 1行ずつ読み取ってループ
         for line in iter(pipe.readline, b''):
             print(f"[{log_prefix}] {line.decode('utf-8', errors='ignore').strip()}", flush=True)
     finally:
