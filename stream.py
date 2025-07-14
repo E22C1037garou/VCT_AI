@@ -187,6 +187,7 @@ def transcribe_loop(url):
         streamlink_cmd.extend(["--youtube-cookies", cookie_file_path])
 
     stream_proc = subprocess.Popen(streamlink_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    ffmpeg_cmd = ["ffmpeg", "-i", "pipe:0", "-f", "s16le", "-acodec", "pcm_s16le", "-ac", "1", "-ar", "16000", "pipe:1"]
     ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=stream_proc.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     threading.Thread(target=log_pipe, args=(stream_proc.stderr, "STREAMLINK_ERR"), daemon=True).start()
