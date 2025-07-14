@@ -184,7 +184,7 @@ def transcribe_loop(url):
     
     # ★★★ クッキーファイルが設定されていれば、コマンドに追加 ★★★
     if cookie_file_path:
-        streamlink_cmd.extend(["--http-cookie-file", cookie_file_path])
+        streamlink_cmd.extend(["--cookies", cookie_file_path])
 
     stream_proc = subprocess.Popen(streamlink_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     ffmpeg_cmd = ["ffmpeg", "-i", "pipe:0", "-f", "s16le", "-acodec", "pcm_s16le", "-ac", "1", "-ar", "16000", "pipe:1"]
