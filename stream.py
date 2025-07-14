@@ -150,7 +150,7 @@ def stop():
 def transcribe_loop(url):
     global transcribe_running
     print("🔁 リアルタイム文字起こし開始（APIモード）")
-    streamlink_cmd = ["streamlink", "--stdout", url, "best"]
+    streamlink_cmd = ["streamlink", "--stdout", url, "bestaudio,best"]
     stream_proc = subprocess.Popen(streamlink_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     ffmpeg_cmd = ["ffmpeg", "-i", "pipe:0", "-f", "s16le", "-acodec", "pcm_s16le", "-ac", "1", "-ar", "16000", "pipe:1"]
     ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdin=stream_proc.stdout, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
@@ -158,17 +158,28 @@ def transcribe_loop(url):
     chunk_duration = 4
     chunk_size = 16000 * 2 * 1 * chunk_duration
     
-    context_buffer = collections.deque(maxlen=3) # 修正: バッファをループの外に移動
+    context_buffer = collections.deque(maxlen=3)
 
     while transcribe_running:
+        # 【デバッグログ追加①】ffmpegからデータを読み込めているか確認
         audio_chunk_raw = ffmpeg_proc.stdout.read(chunk_size)
-        if not audio_chunk_raw: break
+        print(f"DEBUG: Read {len(audio_chunk_raw)} bytes from ffmpeg.")
+
+        if not audio_chunk_raw: 
+            print("DEBUG: ffmpeg stream ended. Exiting loop.") # 【デバッグログ追加②】
+            break
         try:
+            # 【デバッグログ追加③】無音判定の前の音声レベルを確認
+            audio_level = np.abs(np.frombuffer(audio_chunk_raw, dtype=np.int16)).max()
+            print(f"DEBUG: Audio level max is {audio_level}.")
+
             source_text = transcribe_audio_with_api(audio_chunk_raw)
-            if not source_text: continue
+            if not source_text:
+                print("DEBUG: Skipped chunk (silent or API returned empty).") # 【デバッグログ追加④】
+                continue
 
             detected_lang = detect_language_of_text(source_text)
-            print(f"📝 {detected_lang.upper()}: {source_text}")
+            print(f"📝 {detected_lang.upper()}: {source_text}") # このログが表示されれば成功
             
             context_buffer.append(source_text)
             context_for_api = "\n".join(context_buffer)
