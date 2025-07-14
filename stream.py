@@ -13,19 +13,6 @@ from openai import AzureOpenAI, OpenAI
 # .envファイルを読み込み
 load_dotenv()
 
-# === デバッグ用: 環境変数の確認 ===
-import sys
-print("--- Checking Environment Variables ---", file=sys.stderr)
-print(f"ENDPOINT_URL: {os.getenv('ENDPOINT_URL')}", file=sys.stderr)
-print(f"AZURE_OPENAI_API_KEY is set: {bool(os.getenv('AZURE_OPENAI_API_KEY'))}", file=sys.stderr)
-print(f"OPENAI_API_KEY is set: {bool(os.getenv('OPENAI_API_KEY'))}", file=sys.stderr)
-print(f"DEPLOYMENT_NAME: {os.getenv('DEPLOYMENT_NAME')}", file=sys.stderr)
-print(f"SECRET_KEY is set: {bool(os.getenv('SECRET_KEY'))}", file=sys.stderr)
-print("------------------------------------", file=sys.stderr)
-sys.stdout.flush()
-sys.stderr.flush()
-# =====================================
-
 # === クライアント設定 ===
 azure_client = AzureOpenAI(
     azure_endpoint=os.getenv("ENDPOINT_URL"),
